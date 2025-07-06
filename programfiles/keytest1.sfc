@@ -1,0 +1,13 @@
+start()
+debug(off)
+sec=0
+forever:
+  wait(1000)
+  sec=sec+1
+  print(sec)
+
+key("ENTER"):
+  print("ENTER")
+key("A"):
+  wait(300)
+  print("A")

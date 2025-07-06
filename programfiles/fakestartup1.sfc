@@ -1,0 +1,28 @@
+start()
+forever:
+  bark()
+  beep()
+  wait(300)
+  kil=input("Kill? Y/N.")
+  if (kil=="Y"):
+    kill()
+  elif (kil=="N"):
+    print("")
+  elif (kil=="n"):
+      print("")
+  elif (kil=="SOVY"):
+    soviet_song()
+  elif (kil=="NAPOLEON"):
+    napoleon()
+  else:
+    print("Temp_ERR./answernotfound")
+    wait(1000)
+    print("Temp_ERR./answernotfound, instead -", kil)
+    wait(500)
+    print("PROGRAM.TEMPFAIL")
+    wait(500)
+    print("Shutting down")
+    wait(1500)
+    print("kill()")
+    wait(300)
+    kill()

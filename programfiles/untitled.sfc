@@ -1,0 +1,4 @@
+start()
+uname= input("Whats your name?")
+print("Your Name is", uname)
+screen(800, 400) 

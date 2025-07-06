@@ -1,0 +1,33 @@
+start()
+beep()
+name = input("What's your name?")
+print("Hi, ", name, "!")
+beep()
+age = int(input("How old are you?"))
+if (age >= 18):
+  print("Hello Human.")
+else:
+  print("Hello Child.")
+print("Now onto the next questions. Answer Y (Yes) or N (No).")
+answer1 = lower(input("Do you have more than 2 cats? Answer Y (Yes) or N (No)."))
+if (answer1 == "y"):
+  print("Your house is a Zoo.")
+else:
+  print("Get some cats mate")
+answer2 = lower(input("Do you watch Brainrot? Answer Y (Yes) or N (No)."))
+if (answer2 == "y"):
+  if (age >= 13):
+    print("Get a life bro")
+  else:
+    print("Grow up bro")
+else:
+  print("We found a sane person! Avengers! ASSEMBLE!")
+next1 = input("Now, onto MATHS (Mentally Attacking The Healthy Students). Type in anything or leave it empty.")
+
+a = random(0, 100)
+b = random(0, 100)
+answer3 = int(input("What is " + str(a) + " + " + str(b) + "?"))
+if (answer3 == a + b):
+  print("Correct! Well done.")
+else:
+  print("Incorrect. The answer was " + str(a + b))

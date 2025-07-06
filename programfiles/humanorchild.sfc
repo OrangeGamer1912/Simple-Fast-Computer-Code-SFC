@@ -1,0 +1,10 @@
+start()
+beep()
+name=input("What´s your name?")
+print("Hi, " ,name, "!")
+beep()
+age =input("How old are you?")
+if (age >= 18):
+  print("Hello Human")
+else: 
+  print("Hello Child")

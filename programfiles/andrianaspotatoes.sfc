@@ -1,0 +1,6 @@
+start()
+func potatoesoohye(favanimal)
+--
+favanimal=input("What is your favourite animal?")
+--
+potatoesoohye()

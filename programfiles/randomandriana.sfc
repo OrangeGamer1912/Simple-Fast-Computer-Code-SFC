@@ -1,0 +1,19 @@
+start()
+print("I AM A POTATO LALALALAAA") 
+favfood=input("Whats your favourite food?")
+print("Your favourite food is", favfood)
+if (favfood == "IDK"):
+  print("You stoopid ye")
+else:
+  print("You potato! YOU GONNA DIE IF NO EAT BROOO")
+favanimal=input("What is your favorite animal bro?IT GONNA BE STUPID!lol!")
+print(favanimal, "is stupid! OMG you so sdoobid! LOL")
+favcolor=input("What is your fav colour sdoobid bro? lol")
+print("Im sorry I love" ,favcolor,"Im so sorry for bullying you!") 
+befriend=input("Do you want to be friends? (Y for yes and N for no)")
+if (befriend == "N"):
+  print("WEH WEH!IM CRYING!!!!!!! I LOVE YOU!")
+elif (befriend == "Y"):
+  print("thx so much!AND AGAIN , SO SORRY FOR BULLYING U! MY LOVE<3")
+else:
+  print("what")

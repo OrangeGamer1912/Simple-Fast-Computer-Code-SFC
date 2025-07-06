@@ -1,0 +1,11 @@
+start()
+name = input("What is your name?")
+num = int(input("Enter a random number (for the circle radius):"))
+screen(600, 400)
+
+def draw_stuff():
+  draw_text(name, 100, 100, "blue", 32)
+  draw_circle(300, 200, num, "red")
+  kill()  
+
+repeat_every(500, draw_stuff)

@@ -1,0 +1,1006 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>SFC - Simple Fast Computer Code Editor</title>
+  <!-- CodeMirror CSS (local) -->
+  <link rel="stylesheet" href="codemirror/codemirror-5.65.19/lib/codemirror.css">
+  <link rel="stylesheet" href="codemirror/codemirror-5.65.19/theme/dracula.css">
+  <style>
+    /* No custom syntax highlighting overrides: using pure CodeMirror dracula theme */
+    :root {
+      --bg-color: #121212;
+      --panel-bg: #1e1e1e;
+      --panel-border: #333;
+      --button-bg: #272727;
+      --button-border: #444;
+      --button-hover-bg: #3a3a3a;
+      --text-color: #eee;
+      --highlight-color: #00ff99;
+      --error-color: #ff5555;
+      --font-mono: "Consolas", "Courier New", monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 0;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      font-family: var(--font-mono);
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+    #menuBar {
+      width: 60px;
+      background: var(--panel-bg);
+      border-right: 2px solid var(--panel-border);
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      padding-top: 10px;
+    }
+    #menuBar > div {
+      margin: 0 0 10px 0;
+      cursor: pointer;
+      color: var(--highlight-color);
+      font-weight: bold;
+      position: relative;
+      width: 100%;
+      text-align: center;
+    }
+    #menuBar > div:hover {
+      text-decoration: underline;
+    }
+    #fileDropdown {
+      display: none;
+      position: absolute;
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      margin-top: 20px;
+      padding: 5px;
+      z-index: 100;
+      min-width: 100px;
+    }
+    #fileDropdown > div {
+      padding: 3px 10px;
+      cursor: pointer;
+      user-select: none;
+    }
+    #fileDropdown > div:hover {
+      background: var(--button-hover-bg);
+    }
+    /* #editor { display: none; } */
+    #console {
+      height: 3.6em;
+      background: #111;
+      border-top: 2px solid var(--panel-border);
+      color: var(--highlight-color);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      padding: 6px 10px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+    .CodeMirror {
+      flex-grow: 1;
+      height: 100%;
+      font-family: var(--font-mono);
+      font-size: 14px;
+      background: #282a36 !important; /* Dracula theme background */
+      color: #f8f8f2 !important;      /* Dracula theme foreground */
+      border: none;
+    }
+    .CodeMirror-gutters {
+      background: #282a36 !important;
+      border-right: 1px solid #44475a !important;
+    }
+    .CodeMirror-cursor {
+      border-left: 2px solid #f8f8f2 !important;
+    }
+    .CodeMirror-linenumber {
+      color: #6272a4 !important;
+    }
+    .cm-s-dracula.CodeMirror {
+      background: #282a36 !important;
+      color: #f8f8f2 !important;
+    }
+    #editorContainer {
+      flex-grow: 1;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    #editor {
+      flex-grow: 1;
+      height: 100%;
+      border: none;
+      padding: 10px;
+      background: transparent;
+      color: inherit;
+      font-family: var(--font-mono);
+      font-size: 14px;
+      overflow: auto;
+      /* Hide the textarea when CodeMirror is active */
+      position: absolute;
+      left: -9999px;
+      top: -9999px;
+    }
+  </style>
+</head>
+<body>
+    <div id="main" style="display: flex; flex-direction: row; width: 100vw; height: 100vh;">
+      <div id="menuBar" style="flex-direction: column; width: 60px; min-width: 60px; height: 100vh; background: var(--panel-bg); border-right: 2px solid var(--panel-border); display: flex; align-items: flex-start; justify-content: flex-start; padding-top: 10px;">
+        <div id="fileMenu" style="margin: 0 0 20px 0; width: 100%; text-align: center; cursor: pointer; color: var(--highlight-color); font-weight: bold; position: relative;">File ▼
+          <div id="fileDropdown">
+            <div id="menuNewFile">New File</div>
+            <div id="menuSaveFile">Save File</div>
+            <div id="menuLoadFile">Load File</div>
+            <div id="menuDeleteFile">Delete File</div>
+            <div id="menuRenameFile">Rename File</div>
+          </div>
+        </div>
+        <div id="runMenu" style="margin: 0 0 10px 0; color: var(--highlight-color); user-select:none; width: 100%; text-align: center; cursor: pointer;">Run ▶</div>
+        <div id="stopMenu" style="color: var(--error-color); user-select:none; width: 100%; text-align: center; cursor: pointer;">Stop ■</div>
+      </div>
+      <div id="editorContainer" style="flex-grow: 1; display: flex; flex-direction: column; height: 100vh;">
+        <textarea id="editor" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
+        <pre id="console" readonly></pre>
+      </div>
+      <input type="file" id="fileInput" accept=".sfc,.txt" style="display:none;" />
+    </div>
+  <!-- CodeMirror JS (local) -->
+  <script src="codemirror/codemirror-5.65.19/lib/codemirror.js"></script>
+  <script src="codemirror/codemirror-5.65.19/mode/javascript/javascript.js"></script>
+  <script>
+    // Wait for DOM and CodeMirror to be loaded
+    function sfcInit() {
+      if (typeof CodeMirror === "undefined") {
+        document.body.innerHTML = "<div style='color:red;padding:2em;font-size:1.2em;'>CodeMirror failed to load. Please check your local files or try a different browser.</div>";
+        return;
+      }
+      const COLOR_HIGHLIGHT = getComputedStyle(document.documentElement).getPropertyValue('--highlight-color').trim();
+      const COLOR_ERROR = getComputedStyle(document.documentElement).getPropertyValue('--error-color').trim();
+      const fileInput = document.getElementById('fileInput');
+      const consoleEl = document.getElementById('console');
+      const runMenu = document.getElementById('runMenu');
+      const stopMenu = document.getElementById('stopMenu');
+      const fileMenu = document.getElementById('fileMenu');
+      const fileDropdown = document.getElementById('fileDropdown');
+      const editorTextarea = document.getElementById('editor');
+      const editor = CodeMirror.fromTextArea(editorTextarea, {
+        mode: "javascript",
+        theme: "dracula",
+        lineNumbers: true,
+        indentUnit: 2,
+        tabSize: 2,
+        autofocus: true,
+        extraKeys: {"Tab": "indentMore"},
+      });
+
+      // --- SFC CUSTOM SYNTAX HIGHLIGHTING OVERLAY ---
+      const sfcCommands = [
+        "start", "soviet_song", "bark", "napoleon", "turtle_reset", "turtle_forward",
+        "turtle_left", "turtle_right", "turtle_penup", "turtle_pendown", "turtle_setcolor",
+        "turtle_setwidth", "optas", "count", "now", "today", "debug", "kill"
+      ];
+      const sfcKeywords = ["if", "else", "elif", "for", "while", "forever"];
+      // List of built-in functions to highlight as green (default text)
+      const sfcBuiltins = [
+        "print", "input", "int", "float", "str", "len", "range", "max", "min", "abs", "sum", "avg", "clear", "screen",
+        "beep", "reverse", "sort", "shuffle", "upper", "lower", "replace", "random"
+      ];
+      editor.addOverlay({
+        token: function(stream) {
+          if (stream.match(/^#.*$/)) { stream.skipToEnd(); return "comment"; }
+          if (stream.match(/"(?:[^\\"]|\\.)*"/)) return "string";
+          if (stream.match(/'(?:[^\\']|\\.)*'/)) return "string";
+          // SFC keywords (if, else, forever, etc.)
+          for (let kw of sfcKeywords) {
+            if (stream.match(new RegExp("\\b" + kw + "\\b"))) return "keyword";
+          }
+          // SFC commands as function calls (e.g., start(), soviet_song(), kill())
+          for (let cmd of sfcCommands) {
+            // Match command optionally followed by () or (args)
+            let regex = new RegExp("^" + cmd + "\\s*(\\(.*?\\))?");
+            if (stream.match(regex)) {
+              if (cmd === "kill") return "error";
+              return "builtin";
+            }
+          }
+          // Built-in functions: match as default (do not color as variable)
+          for (let fn of sfcBuiltins) {
+            // Only match as a function call (must be followed by '(')
+            let regex = new RegExp("^" + fn + "\\s*\\(");
+            if (stream.match(regex, false)) {
+              stream.match(/\b[a-zA-Z_][a-zA-Z0-9_]*\b/); // consume the function name
+              return null; // Use default (green)
+            }
+          }
+          // Variables: match variable names (not a keyword/command/builtin, not followed by '(')
+          if (stream.match(/\b[a-zA-Z_][a-zA-Z0-9_]*\b/)) {
+            let word = stream.current();
+            if (!sfcKeywords.includes(word) && !sfcCommands.includes(word) && !sfcBuiltins.includes(word)) {
+              // Lookahead for '('
+              if (!stream.match(/^\s*\(/, false)) {
+                return "variable";
+              }
+            }
+          }
+          stream.next();
+          return null;
+        }
+      });
+      setTimeout(function() {
+        if (editor && editor.getWrapperElement) {
+          editor.getWrapperElement().addEventListener('keydown', function(e) {
+            try {
+              const audio = new Audio('sounds/key.mp3');
+              audio.volume = 0.15;
+              audio.currentTime = 0;
+              audio.play();
+            } catch (err) {}
+          });
+        }
+      }, 200);
+      // --- Allow SFC key detection for special keys when program is running ---
+      setTimeout(function() {
+        if (editor && editor.getWrapperElement) {
+          editor.getWrapperElement().addEventListener('keydown', function(e) {
+            if (window.programRunning) {
+              // List of keys to let through to global handler
+              const passthroughKeys = ["Enter", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " ", "Space", "Tab"];
+              if (passthroughKeys.includes(e.key) || passthroughKeys.includes(e.code) || e.key.length === 1) {
+                // Prevent CodeMirror from handling, let browser/global get it
+                e.stopPropagation();
+                // For Enter and Space, also prevent default to avoid newlines/spaces in editor
+                if (e.key === "Enter" || e.key === " ") e.preventDefault();
+              }
+            }
+          }, true); // useCapture: true
+        }
+      }, 250);
+      let files = {};
+      let currentFile = null;
+      let programRunning = false;
+      window._sfcIntervals = window._sfcIntervals || [];
+      loadFilesFromStorage();
+      if (Object.keys(files).length === 0) {
+        createNewFile();
+      } else {
+        loadFile(Object.keys(files)[0]);
+      }
+      function loadFilesFromStorage() {
+        const saved = localStorage.getItem('sfc_files');
+        if (saved) {
+          try { files = JSON.parse(saved); } catch { files = {}; }
+        }
+      }
+      function saveFilesToStorage() {
+        localStorage.setItem('sfc_files', JSON.stringify(files));
+      }
+      function loadFile(filename) {
+        if (!files[filename]) return;
+        if (programRunning) {
+          alert("Stop the program before switching files.");
+          return;
+        }
+        if (currentFile !== filename) {
+          currentFile = filename;
+          editor.setValue(files[filename]);
+          logToConsole(`Loaded file: ${filename}`);
+        } else {
+          editor.setValue(files[filename]);
+        }
+      }
+      function createNewFile() {
+        let newName = 'untitled.sfc';
+        let i = 1;
+        while (files[newName]) {
+          newName = `untitled${i}.sfc`;
+          i++;
+        }
+        files[newName] = '';
+        currentFile = newName;
+        editor.setValue('');
+        saveFilesToStorage();
+      }
+      function saveCurrentFile() {
+        if (!currentFile) return;
+        const content = editor.getValue();
+        if (window.showSaveFilePicker) {
+          (async () => {
+            try {
+              const opts = {
+                suggestedName: currentFile,
+                startIn: 'documents',
+                types: [
+                  { description: 'SFC Files', accept: { 'text/plain': ['.sfc', '.txt'] } }
+                ]
+              };
+              const handle = await window.showSaveFilePicker(opts);
+              const writable = await handle.createWritable();
+              await writable.write(content);
+              await writable.close();
+              if (handle.name !== currentFile) {
+                delete files[currentFile];
+              }
+              files[handle.name] = content;
+              currentFile = handle.name;
+              saveFilesToStorage();
+              logToConsole(`Saved file: ${currentFile}`);
+            } catch (err) {
+              logToConsole('Save cancelled or failed.');
+            }
+          })();
+        } else {
+          files[currentFile] = content;
+          saveFilesToStorage();
+          logToConsole(`Saved file: ${currentFile}`);
+          const blob = new Blob([content], {type: 'text/plain'});
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = currentFile.endsWith('.sfc') ? currentFile : currentFile + '.txt';
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(() => {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(a.href);
+          }, 100);
+        }
+      }
+      function logToConsole(msg) {
+        consoleEl.textContent += msg + '\n';
+        consoleEl.scrollTop = consoleEl.scrollHeight;
+      }
+      fileInput.addEventListener('change', (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const content = e.target.result;
+          let name = file.name;
+          files[name] = content;
+          for (const fname in files) {
+            if (fname !== name && fname.toLowerCase() === name.toLowerCase()) {
+              delete files[fname];
+            }
+          }
+          currentFile = name;
+          editor.setValue(content);
+          saveFilesToStorage();
+          logToConsole(`Loaded file from disk: ${name}`);
+        };
+        reader.readAsText(file);
+        fileInput.value = '';
+      });
+      fileMenu.addEventListener('click', () => {
+        fileDropdown.style.display = fileDropdown.style.display === 'block' ? 'none' : 'block';
+      });
+      document.getElementById('menuNewFile').addEventListener('click', () => {
+        fileDropdown.style.display = 'none';
+        createNewFile();
+      });
+      document.getElementById('menuSaveFile').addEventListener('click', () => {
+        fileDropdown.style.display = 'none';
+        saveCurrentFile();
+      });
+      document.getElementById('menuLoadFile').addEventListener('click', () => {
+        fileDropdown.style.display = 'none';
+        fileInput.click();
+      });
+      document.getElementById('menuDeleteFile').addEventListener('click', () => {
+        fileDropdown.style.display = 'none';
+        if (!currentFile) return;
+        if (confirm(`Delete file '${currentFile}'?`)) {
+          delete files[currentFile];
+          saveFilesToStorage();
+          const fileNames = Object.keys(files);
+          if (fileNames.length > 0) {
+            loadFile(fileNames[0]);
+          } else {
+            createNewFile();
+          }
+          logToConsole(`Deleted file: ${currentFile}`);
+        }
+      });
+      document.getElementById('menuRenameFile').addEventListener('click', () => {
+        fileDropdown.style.display = 'none';
+        if (!currentFile) return;
+        const newName = prompt('Rename file to:', currentFile);
+        if (newName && newName !== currentFile && !files[newName]) {
+          files[newName] = files[currentFile];
+          delete files[currentFile];
+          currentFile = newName;
+          saveFilesToStorage();
+          logToConsole(`Renamed file to: ${newName}`);
+        } else if (files[newName]) {
+          alert('A file with that name already exists.');
+        }
+      });
+      document.addEventListener('click', (e) => {
+        if (!fileMenu.contains(e.target)) {
+          fileDropdown.style.display = 'none';
+        }
+      });
+      // --- KEY STATE TRACKER FOR tkey() ---
+      window._sfcKeyState = {};
+      window._sfcLastKey = null;
+      window._sfcAnyKeyDown = false;
+      // Listen for keydown/keyup globally, always (useCapture: true ensures all keys are tracked)
+      function sfcKeyEventHandler(e) {
+        const keyName = e.key.toUpperCase();
+        if (e.type === 'keydown') {
+          window._sfcKeyState[keyName] = true;
+          window._sfcLastKey = keyName;
+          window._sfcAnyKeyDown = true;
+          // Debug: log all keydowns
+          // console.log(`[SFC DEBUG] KeyDown: ${keyName} detected`);
+        } else if (e.type === 'keyup') {
+          window._sfcKeyState[keyName] = false;
+          // Debug: log all keyups
+          // console.log(`[SFC DEBUG] KeyUp: ${keyName} released`);
+          setTimeout(function() {
+            window._sfcAnyKeyDown = Object.values(window._sfcKeyState).some(Boolean);
+          }, 0);
+        }
+      }
+      window.addEventListener('keydown', sfcKeyEventHandler, true); // useCapture: true
+      window.addEventListener('keyup', sfcKeyEventHandler, true); // useCapture: true
+      // tkey(key): returns true if key is currently pressed, or if 'none', true if no key is pressed
+      window.tkey = function(key) {
+        if (typeof key !== 'string') return false;
+        let normKey = key.toUpperCase();
+        if (normKey === 'NONE') {
+          // True if no key is pressed
+          return !Object.values(window._sfcKeyState).some(Boolean);
+        }
+        let result = !!window._sfcKeyState[normKey];
+        // Debug log for tkey
+        // console.log(`[SFC DEBUG] tkey('${normKey}') = ${result}`);
+        return result;
+      };
+      // key(key): event handler version (to be implemented after tkey)
+
+      runMenu.addEventListener('click', () => {
+        if (programRunning) {
+          alert("Program already running.");
+          return;
+        }
+        window._sfcKillFlag = false;
+        programRunning = true;
+        runMenu.style.background = '#222';
+        runMenu.style.color = '#ff0';
+        logToConsole("Program started.");
+        window.print = function(...args) {
+          logToConsole(args.map(x => (typeof x === "undefined" ? "undefined" : x)).join(' '));
+        };
+        window.int = function(x) { return parseInt(x, 10); };
+        window.float = function(x) { return parseFloat(x); };
+        window.str = function(x) { return String(x); };
+        window.len = function(x) { return x.length; };
+        window.range = function(n) { return Array.from({length: n}, (_, i) => i); };
+        window.input = function(msg) { return prompt(msg || 'Input:'); };
+        window.kill = function() { window._sfcKillFlag = true; throw {__kill: true}; };
+        window.max = function(...args) { return Math.max(...args); };
+        window.min = function(...args) { return Math.min(...args); };
+        window.abs = function(x) { return Math.abs(x); };
+        window.sum = function(arr) { return arr.reduce((a, b) => a + b, 0); };
+        window.avg = function(arr) { return arr.length ? window.sum(arr) / arr.length : 0; };
+        window.clear = function() { consoleEl.textContent = ''; };
+        window.screen = function(width, height) {
+          width = width || 600;
+          height = height || 400;
+          const win = window.open('', '', `width=${width},height=${height},resizable=yes,scrollbars=no`);
+          if (win) {
+            win.document.write(`<!DOCTYPE html><html><head><title>Screen</title></head><body style='margin:0;background:#222;'><canvas id='canvas' width='${width}' height='${height}' style='display:block;margin:0 auto;background:#fff;'></canvas></body></html>`);
+            win.document.close();
+            win.focus();
+            window._screenWindow = win;
+            window._screenCanvas = null;
+            window._screenCtx = null;
+            win.onload = function() {
+              window._screenCanvas = win.document.getElementById('canvas');
+              window._screenCtx = window._screenCanvas.getContext('2d');
+            };
+            setTimeout(function() {
+              if (!window._screenCanvas && win.document.getElementById('canvas')) {
+                window._screenCanvas = win.document.getElementById('canvas');
+                window._screenCtx = win.document.getElementById('canvas').getContext('2d');
+              }
+            }, 200);
+          } else {
+            logToConsole('Popup blocked! Please allow popups for this site.');
+          }
+        };
+        window.start = function() {};
+        // --- Date/Time ---
+        window.now = function() { 
+          const val = new Date().toLocaleString();
+          print(val);
+          return val;
+        };
+        window.today = function() { 
+          const val = new Date().toLocaleDateString();
+          print(val);
+          return val;
+        };
+        // --- Math ---
+        window.round = function(x) { return Math.round(x); };
+        window.floor = function(x) { return Math.floor(x); };
+        window.ceil = function(x) { return Math.ceil(x); };
+        window.pow = function(a, b) { return Math.pow(a, b); };
+        window.sqrt = function(x) { return Math.sqrt(x); };
+        // --- Fun/utility ---
+        window.bark = function() { window.play_sound('sounds/dog.mp3'); };
+        window.count = function(num1, num2) {
+          for (let i = num1; i <= num2; i++) print(i);
+        };
+        window.soviet_song = function() {
+          print("Soyuz nerushimy respublik svobodnykh,\nSplotila naveki Velikaya Rus'.\nDa zdravstvuyet sozdanny voley narodov\nYediny, moguchy Sovetsky Soyuz!\n\nSlavsya, Otechestvo nashe svobodnoye,\nDruzhby narodov nadyozhny oplot!\nPartiya Lenina - sila narodnaya\nNas k torzhestvu kommunizma vedyot!\n\nSkvoz' grozy siyalo nam solntse svobody,\nI Lenin velikiy nam put' ozaril:\nNa pravoye delo on podnyal narody,\nNa trud i na podvigi nas vdokhnovil!\n\nSlavsya, Otechestvo nashe svobodnoye,\nDruzhby narodov nadyozhny oplot!\nPartiya Lenina - sila narodnaya\nNas k torzhestvu kommunizma vedyot!\n\nV pobede bessmertnykh idey kommunizma\nMy vidim gryadushcheye nashey strany,\nI Krasnomu znameni slavnoy Otchizny\nMy budem vsegda bezzavetno verny!\n\nSlavsya, Otechestvo nashe svobodnoye,\nDruzhby narodov nadyozhny oplot!\nPartiya Lenina - sila narodnaya\nNas k torzhestvu kommunizma vedyot!");
+        };
+        window.napoleon = function() { print("Napoleon is back. Beware of Horses."); };
+        // --- Output Paste (optas) ---
+        window.optas = function() {
+          // Try fetch first (works on localhost or server)
+          fetch('sfc-editor.html')
+            .then(r => {
+              if (!r.ok) throw new Error('HTTP error');
+              return r.text();
+            })
+            .then(txt => {
+              // Print in chunks to avoid console overflow
+              let lines = txt.split(/\r?\n/);
+              let chunk = '';
+              for (let i = 0; i < lines.length; i++) {
+                chunk += lines[i] + '\n';
+                if (chunk.length > 1500) {
+                  print(chunk);
+                  chunk = '';
+                }
+              }
+              if (chunk) print(chunk);
+            })
+            .catch(e => {
+              print('Could not load source code (likely due to browser security restrictions).');
+            });
+        };
+        // --- Turtle Graphics ---
+        window._turtle = {
+          x: 300, y: 200, angle: 0, pen: true, ctx: null, color: '#000', width: 2
+        };
+        window.turtle_reset = function() {
+          if (!window._screenCtx) window.screen();
+          window._turtle.x = 300; window._turtle.y = 200; window._turtle.angle = 0;
+          window._turtle.pen = true; window._turtle.ctx = window._screenCtx;
+          window._turtle.color = '#000'; window._turtle.width = 2;
+          if (window._screenCtx) window._screenCtx.clearRect(0,0,600,400);
+        };
+        window.turtle_forward = function(steps) {
+          let t = window._turtle;
+          let rad = t.angle * Math.PI / 180;
+          let nx = t.x + Math.cos(rad) * steps;
+          let ny = t.y + Math.sin(rad) * steps;
+          if (t.pen && t.ctx) {
+            t.ctx.strokeStyle = t.color;
+            t.ctx.lineWidth = t.width;
+            t.ctx.beginPath();
+            t.ctx.moveTo(t.x, t.y);
+            t.ctx.lineTo(nx, ny);
+            t.ctx.stroke();
+          }
+          t.x = nx; t.y = ny;
+        };
+        window.turtle_left = function(deg) { window._turtle.angle -= deg; };
+        window.turtle_right = function(deg) { window._turtle.angle += deg; };
+        window.turtle_penup = function() { window._turtle.pen = false; };
+        window.turtle_pendown = function() { window._turtle.pen = true; };
+        window.turtle_setcolor = function(color) { window._turtle.color = color; };
+        window.turtle_setwidth = function(w) { window._turtle.width = w; };
+        // --- Logical operators (Python style, JS under the hood) ---
+        // SFC: and(a, b), or(a, b), not(x)
+        window.and = function(a, b) { return a && b; };
+        window.or = function(a, b) { return a || b; };
+        window.not = function(x) { return !x; };
+        // Usage: if (and(a, b)): ...
+        let code = editor.getValue();
+        let lines = code.split(/\r?\n/);
+        if (!lines[0].trim().startsWith('start()')) {
+          logToConsole('Error: First line must be start()');
+          programRunning = false;
+          runMenu.style.background = '';
+          runMenu.style.color = '';
+          return;
+        }
+        code = lines.map(line => line.trim().startsWith('#') ? '' : line).join('\n');
+        function pythonToJsBlocks(src) {
+          const lines = src.split(/\r?\n/);
+          let out = [];
+          let indentStack = [0];
+          let blockTypeStack = [];
+          // --- Collect key handler blocks ---
+          let keyHandlers = [];
+          let i = 0;
+          while (i < lines.length) {
+            let line = lines[i];
+            let keyMatch = line.match(/^(\s*)key\(([^)]+)\):\s*$/);
+            if (keyMatch) {
+              // Found a key handler block
+              let keyIndent = keyMatch[1].length;
+              let keyArg = keyMatch[2].trim();
+              let handlerLines = [];
+              i++;
+              // Collect indented block
+              while (i < lines.length && lines[i].match(/^\s+/) && lines[i].match(/^\s*/)[0].length > keyIndent) {
+                handlerLines.push(lines[i].slice(keyIndent + 2)); // Remove extra indent
+                i++;
+              }
+              keyHandlers.push({
+                key: keyArg,
+                code: handlerLines.join('\n')
+              });
+              continue;
+            }
+            if (!line.trim()) { out.push(line); i++; continue; }
+            let indent = line.match(/^\s*/)[0].length;
+            while (indent < indentStack[indentStack.length-1]) {
+              out.push(' '.repeat(indentStack.pop()) + '}');
+              blockTypeStack.pop();
+            }
+            // forever:  --> while (true) {
+            let foreverMatch = line.match(/^(\s*)forever:\s*$/);
+            if (foreverMatch) {
+              out.push(foreverMatch[1] + 'while (true) {');
+              indentStack.push(indent + 2);
+              blockTypeStack.push('forever');
+              i++;
+              continue;
+            }
+            let m = line.match(/^(\s*)(if|elif|else if|else)\s*(\(.*?\)|[^:]*)?:\s*$/);
+            if (m) {
+              let keyword = m[2];
+              let cond = m[3] ? m[3].trim() : '';
+              function wrapCond(c) {
+                if (!c) return '';
+                c = c.trim();
+                if (c.startsWith('(') && c.endsWith(')')) return c;
+                return '(' + c + ')';
+              }
+              if (keyword === 'elif') {
+                if (cond.length > 0) {
+                  out.push(m[1] + 'else if ' + wrapCond(cond) + ' {');
+                } else {
+                  out.push(m[1] + 'else if {');
+                }
+              } else if (keyword === 'if' || keyword === 'else if') {
+                if (cond.length > 0) {
+                  out.push(m[1] + keyword + ' ' + wrapCond(cond) + ' {');
+                } else {
+                  out.push(m[1] + keyword + ' {');
+                }
+              } else if (keyword === 'else') {
+                out.push(m[1] + 'else {');
+              }
+              indentStack.push(indent + 2);
+              blockTypeStack.push('block');
+              i++;
+              continue;
+            }
+          // --- SFC func() -- ... -- block (Python-like function with -- delimiters) ---
+          let funcMatch = line.match(/^(\s*)func\s+([a-zA-Z0-9_]+)\s*\(([^)]*)\)\s*$/);
+          if (funcMatch) {
+            let funcIndent = funcMatch[1].length;
+            let funcName = funcMatch[2];
+            let funcArgs = funcMatch[3];
+            let funcBody = [];
+            i++;
+            // Require -- as start of block
+            if (i < lines.length && lines[i].trim() === '--') {
+              i++;
+              // Collect lines until -- (end delimiter)
+              while (i < lines.length && lines[i].trim() !== '--') {
+                funcBody.push(lines[i]);
+                i++;
+              }
+              // Skip the ending --
+              if (i < lines.length && lines[i].trim() === '--') i++;
+            } else {
+              // If no --, treat as empty function
+            }
+            // Output as JS function
+            out.push('function ' + funcName + '(' + funcArgs + ') {');
+            // Add function body, preserving indentation
+            funcBody.forEach(bodyLine => {
+              out.push('  ' + bodyLine);
+            });
+            out.push('}');
+            continue;
+          }
+          // --- Python def fallback (legacy) ---
+          let f = line.match(/^(\s*)def\s+([a-zA-Z0-9_]+)\s*\(([^)]*)\):\s*$/);
+          if (f) {
+            out.push(f[1] + 'function ' + f[2] + '(' + f[3] + ') {');
+            indentStack.push(indent + 2);
+            blockTypeStack.push('def');
+            i++;
+            continue;
+          }
+            let forMatch = line.match(/^(\s*)for\s+([a-zA-Z0-9_]+)\s+in\s+([a-zA-Z0-9_\[\]\(\)\.]+):\s*$/);
+            if (forMatch) {
+              out.push(forMatch[1] + 'for (let ' + forMatch[2] + ' of ' + forMatch[3] + ') {');
+              indentStack.push(indent + 2);
+              blockTypeStack.push('for');
+              i++;
+              continue;
+            }
+          // --- SFC debug(on)/debug(off) ---
+          let debugOnMatch = line.match(/^\s*debug\((on|off)\)\s*$/i);
+          if (debugOnMatch) {
+            let val = debugOnMatch[1].toLowerCase() === 'on' ? 'true' : 'false';
+            out.push('window._sfcKeyDebug = ' + val + ';');
+            i++;
+            continue;
+          }
+          out.push(line);
+          i++;
+          }
+          while (indentStack.length > 1) {
+            out.push(' '.repeat(indentStack.pop()) + '}');
+            blockTypeStack.pop();
+          }
+          // After collecting, add a marker for keyHandlers to be injected later (as a statement, not at the end)
+          // Find the last non-empty line to inject before any trailing '}'
+          let lastNonEmpty = out.length - 1;
+          while (lastNonEmpty >= 0 && out[lastNonEmpty].trim() === '') lastNonEmpty--;
+          // Insert marker before the last closing '}' if present, else at the end
+          let insertAt = out.length;
+          for (let j = out.length - 1; j >= 0; j--) {
+            if (out[j].trim() === '}') {
+              insertAt = j;
+              break;
+            }
+          }
+          out.splice(insertAt, 0, '//__SFC_KEY_HANDLERS__');
+          return { code: out.join('\n'), keyHandlers };
+        }
+        try {
+          // Option to enable debug output for key handlers
+          window._sfcKeyDebug = false; // Set to true for debug
+          let transpiled = pythonToJsBlocks(code);
+          code = transpiled.code;
+          let keyHandlers = transpiled.keyHandlers;
+          // Optionally, replace Python-style logical operators with JS equivalents
+          code = code.replace(/\band\b/g, 'and').replace(/\bor\b/g, 'or').replace(/\bnot\b/g, 'not');
+          // --- SFC tkey() PATCH ---
+          // Replace tkey(KEY) with tkey(KEY) (no change, but ensures it's available)
+          // --- ASYNC/AWAIT PATCH FOR WAIT ---
+          code = code.replace(/([^\w])wait\s*\(/g, '$1await wait(');
+          // --- Inject key handler runtime code ---
+          if (keyHandlers.length > 0) {
+            let keyHandlerJS = '\n// SFC key() event handler support\n';
+            keyHandlerJS += 'window._sfcKeyHandlerStates = window._sfcKeyHandlerStates || {};' + '\n';
+            keyHandlers.forEach((h, idx) => {
+              // Handler function name
+              let funcName = `_sfc_keyhandler_${idx}`;
+              // Remove quotes from key arg if present
+              let keyArg = h.key.trim();
+              if ((keyArg.startsWith('"') && keyArg.endsWith('"')) || (keyArg.startsWith("'") && keyArg.endsWith("'"))) {
+                keyArg = keyArg.slice(1, -1);
+              }
+              // Always use uppercase for key matching
+              let keyArgUpper = keyArg.toUpperCase();
+              // Handler function
+              keyHandlerJS += `async function ${funcName}() {\n${h.code}\n}\n`;
+              // Setup polling interval for this key
+              keyHandlerJS += `if (!window._sfcKeyHandlerStates['${keyArgUpper}']) window._sfcKeyHandlerStates['${keyArgUpper}'] = {down: false};\n`;
+              keyHandlerJS += `window._sfcIntervals.push(setInterval(async function() {\n`;
+              keyHandlerJS += `  if (window._sfcKeyDebug) print('[key handler debug] polling for ${keyArgUpper}... tkey=' + tkey('${keyArgUpper}'));\n`;
+              keyHandlerJS += `  if (window._sfcKillFlag) return;\n`;
+              keyHandlerJS += `  if (tkey('${keyArgUpper}')) {\n`;
+              keyHandlerJS += `    if (window._sfcKeyDebug) print('[key handler debug] tkey TRUE for ${keyArgUpper}');\n`;
+              keyHandlerJS += `    if (!window._sfcKeyHandlerStates['${keyArgUpper}'].down) {\n`;
+              keyHandlerJS += `      window._sfcKeyHandlerStates['${keyArgUpper}'].down = true;\n`;
+              keyHandlerJS += `      if (window._sfcKeyDebug) print('[key handler] Firing for ${keyArgUpper}');\n`;
+              keyHandlerJS += `      try { await ${funcName}(); } catch (e) { print('[key handler error] ' + (e && e.message ? e.message : e)); }\n`;
+              keyHandlerJS += `    }\n`;
+              keyHandlerJS += `  } else {\n`;
+              keyHandlerJS += `    window._sfcKeyHandlerStates['${keyArgUpper}'].down = false;\n`;
+              keyHandlerJS += `  }\n`;
+              keyHandlerJS += `}, 150));\n`;
+            });
+            code = code.replace('//__SFC_KEY_HANDLERS__', keyHandlerJS);
+          } else {
+            code = code.replace('//__SFC_KEY_HANDLERS__', '');
+          }
+          // Wrap the code in an async IIFE
+          code = `(async function() {\n${code}\n})()`;
+        } catch (e) {
+          logToConsole('Transpiler error: ' + (e && e.message ? e.message : e));
+          programRunning = false;
+          runMenu.style.background = '';
+          runMenu.style.color = '';
+          return;
+        }
+        (async () => {
+          try {
+            await eval(code);
+            logToConsole("Program finished.");
+          } catch (err) {
+            if (err && err.__kill) {
+              logToConsole("Program killed.");
+            } else {
+              let lineInfo = '';
+              let sfcLineInfo = '';
+              let sfcLines = editor.getValue().split(/\r?\n/);
+              // Try to map JS runtime errors as before
+              if (err && err.stack) {
+                let m = err.stack.match(/<anonymous>:(\d+):\d+/);
+                if (m) {
+                  let jsLineNum = parseInt(m[1], 10);
+                  lineInfo = ` (JS line ${jsLineNum})`;
+                  let codeLines = code.split(/\r?\n/);
+                  let sfcGuess = '';
+                  if (jsLineNum > 0 && jsLineNum <= codeLines.length) {
+                    let search = codeLines[jsLineNum-1].trim();
+                    for (let i = 0; i < sfcLines.length; i++) {
+                      if (sfcLines[i].trim() && codeLines[jsLineNum-1].includes(sfcLines[i].trim().split(':')[0])) {
+                        sfcGuess = `SFC line ${i+1}: ${sfcLines[i].trim()}`;
+                        break;
+                      }
+                    }
+                    if (!sfcGuess) {
+                      let sfcIdx = Math.max(0, jsLineNum-2);
+                      sfcGuess = `SFC line ${sfcIdx+1}: ${sfcLines[sfcIdx] ? sfcLines[sfcIdx].trim() : ''}`;
+                    }
+                    sfcLineInfo = `\n  → ${sfcGuess}`;
+                  }
+                }
+              }
+              // If no line info and error is a syntax error, try to guess the SFC line
+              if (!lineInfo && err && err.message && /literal not terminated|Unexpected end of input|unterminated/i.test(err.message)) {
+                // Look for first line with unbalanced quotes
+                let quoteLine = -1;
+                for (let i = 0; i < sfcLines.length; i++) {
+                  let line = sfcLines[i];
+                  let dq = (line.match(/\"/g)||[]).length;
+                  let sq = (line.match(/\'/g)||[]).length;
+                  if (dq % 2 !== 0 || sq % 2 !== 0) {
+                    quoteLine = i;
+                    break;
+                  }
+                }
+                if (quoteLine !== -1) {
+                  sfcLineInfo = `\n  → SFC line ${quoteLine+1}: ${sfcLines[quoteLine].trim()}`;
+                }
+              }
+              logToConsole(`Error: ${err.message}${lineInfo}${sfcLineInfo}`);
+            }
+          }
+          programRunning = false;
+          runMenu.style.background = '';
+          runMenu.style.color = '';
+        })();
+      });
+      stopMenu.addEventListener('click', () => {
+        if (window._sfcIntervals && window._sfcIntervals.length) {
+          window._sfcIntervals.forEach(id => clearInterval(id));
+          window._sfcIntervals = [];
+        }
+        if (!programRunning) {
+          alert("No program is running.");
+          return;
+        }
+        window._sfcKillFlag = true;
+        logToConsole("Kill signal sent. Waiting for program to stop...");
+      });
+      window.draw_rect = function(x, y, w, h, color) {
+        if (window._screenCtx) {
+          window._screenCtx.fillStyle = color || '#000';
+          window._screenCtx.fillRect(x, y, w, h);
+        }
+      };
+      window.draw_circle = function(x, y, r, color) {
+        if (window._screenCtx) {
+          window._screenCtx.beginPath();
+          window._screenCtx.arc(x, y, r, 0, 2 * Math.PI);
+          window._screenCtx.fillStyle = color || '#000';
+          window._screenCtx.fill();
+        }
+      };
+      window.draw_line = function(x1, y1, x2, y2, color, width) {
+        if (window._screenCtx) {
+          window._screenCtx.strokeStyle = color || '#000';
+          window._screenCtx.lineWidth = width || 1;
+          window._screenCtx.beginPath();
+          window._screenCtx.moveTo(x1, y1);
+          window._screenCtx.lineTo(x2, y2);
+          window._screenCtx.stroke();
+        }
+      };
+      window.draw_text = function(text, x, y, color, size) {
+        if (window._screenCtx) {
+          window._screenCtx.fillStyle = color || '#000';
+          window._screenCtx.font = (size || 20) + 'px monospace';
+          window._screenCtx.fillText(text, x, y);
+        }
+      };
+      window.set_color = function(color) {
+        if (window._screenCtx) {
+          window._screenCtx.fillStyle = color;
+          window._screenCtx.strokeStyle = color;
+        }
+      };
+      window._sfcKillFlag = false;
+      window.wait = async function(ms) {
+        if (window._sfcKillFlag) throw {__kill: true};
+        await new Promise(resolve => setTimeout(resolve, ms));
+        if (window._sfcKillFlag) throw {__kill: true};
+      };
+      window.sleep = window.wait;
+      window.repeat_every = function(ms, func) {
+        let id;
+        if (typeof func === 'function') {
+          id = setInterval(func, ms);
+        } else if (typeof func === 'undefined') {
+          try {
+            const err = new Error();
+            const stack = err.stack || '';
+            const match = stack.match(/repeat_every\\((\\d+),\\s*([a-zA-Z0-9_]+)\\(\\)\\)/);
+            if (match) {
+              const fnName = match[2];
+              if (typeof window[fnName] === 'function') {
+                id = setInterval(window[fnName], ms);
+              }
+            }
+          } catch {}
+          if (!id) return null;
+        } else {
+          id = setInterval(function() { func; }, ms);
+        }
+        window._sfcIntervals.push(id);
+        return id;
+      };
+      window.stop_repeat = function(id) {
+        clearInterval(id);
+        window._sfcIntervals = window._sfcIntervals.filter(x => x !== id);
+      };
+      window.play_sound = function(url) {
+        const audio = new Audio(url);
+        audio.play();
+      };
+      window.beep = function() {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.value = 440;
+        osc.connect(ctx.destination);
+        osc.start();
+        setTimeout(() => { osc.stop(); ctx.close(); }, 200);
+      };
+      window.reverse = function(arr) { return arr.slice().reverse(); };
+      window.sort = function(arr) { return arr.slice().sort((a, b) => a - b); };
+      window.shuffle = function(arr) {
+        let a = arr.slice();
+        for (let i = a.length - 1; i > 0; i--) {
+          let j = Math.floor(Math.random() * (i + 1));
+          [a[i], a[j]] = [a[j], a[i]];
+        }
+        return a;
+      };
+      window.upper = function(str) { return String(str).toUpperCase(); };
+      window.lower = function(str) { return String(str).toLowerCase(); };
+      window.replace = function(str, oldVal, newVal) { return String(str).split(oldVal).join(newVal); };
+      window.random = function(a, b) {
+        if (typeof a === 'undefined') return Math.random();
+        if (typeof b === 'undefined') return Math.floor(Math.random() * a);
+        return Math.floor(Math.random() * (b - a + 1)) + a;
+      };
+    }
+    // Wait for DOM and CodeMirror to be loaded before running sfcInit
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', sfcInit);
+    } else {
+      sfcInit();
+    }
+  </script>
+</body>
+</html>
